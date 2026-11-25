@@ -1,0 +1,178 @@
+__include__: [
+  '../runtime.yml',
+]
+
+task: detection
+model: ChemRTv4
+criterion: ChemCriterion
+postprocessor: ChemPostProcessor
+
+output_dir: ./outputs/chem_dual_hgnetv2_s
+print_freq: 50
+checkpoint_freq: 4
+
+sync_bn: True
+find_unused_parameters: False
+use_amp: False
+use_ema: False
+
+evaluator:
+  type: ChemEvaluator
+  box_iou_thresh: 0.5
+  line_distance_thresh: 12.0
+
+train_dataloader:
+  type: DataLoader
+  total_batch_size: 8
+  dataset:
+    type: ChemDualTaskDataset
+    img_folder: /recovery/bo/pys/rtv4_ac_b/trainning_data/images/train
+    atom_ann_file: /recovery/bo/pys/rtv4_ac_b/trainning_data/annotations/train_atom_charge.json
+    bond_ann_file: /recovery/bo/pys/rtv4_ac_b/trainning_data/annotations/train_bonds.json
+    rgroup_ann_file: /recovery/bo/pys/rtv4_ac_b/trainning_data/annotations/train_rgroups.json
+    image_size: [640, 640]
+    merge_rgroups_to_box_other: True
+  shuffle: True
+  num_workers: 4
+  drop_last: True
+  collate_fn:
+    type: BatchImageCollateFunction
+    base_size: 640
+    mixup_prob: 0.0
+
+val_dataloader:
+  type: DataLoader
+  total_batch_size: 8
+  dataset:
+    type: ChemDualTaskDataset
+    img_folder: /recovery/bo/pys/rtv4_ac_b/trainning_data/images/val
+    atom_ann_file: /recovery/bo/pys/rtv4_ac_b/trainning_data/annotations/val_atom_charge.json
+    bond_ann_file: /recovery/bo/pys/rtv4_ac_b/trainning_data/annotations/val_bonds.json
+    rgroup_ann_file: /recovery/bo/pys/rtv4_ac_b/trainning_data/annotations/val_rgroups.json
+    image_size: [640, 640]
+    merge_rgroups_to_box_other: True
+  shuffle: False
+  num_workers: 4
+  drop_last: False
+  collate_fn:
+    type: BatchImageCollateFunction
+    base_size: 640
+    mixup_prob: 0.0
+
+ChemRTv4:
+  backbone: HGNetv2
+  encoder: HybridEncoder
+  box_decoder:
+    type: RTDETRTransformerv2
+    num_classes: 18
+    feat_channels: [256, 256, 256]
+    feat_strides: [8, 16, 32]
+    hidden_dim: 256
+    num_levels: 3
+    num_layers: 6
+    eval_idx: -1
+    num_queries: 300
+    num_denoising: 100
+    label_noise_ratio: 0.5
+    box_noise_scale: 1.0
+  line_decoder:
+    type: RTDETRTransformerv2
+    num_classes: 7
+    feat_channels: [256, 256, 256]
+    feat_strides: [8, 16, 32]
+    hidden_dim: 256
+    num_levels: 3
+    num_layers: 6
+    eval_idx: -1
+    num_queries: 300
+    num_denoising: 0
+
+eval_spatial_size: [640, 640]
+use_focal_loss: True
+num_top_queries: 300
+
+HGNetv2:
+  name: 'B0'
+  return_idx: [1, 2, 3]
+  freeze_at: -1
+  freeze_norm: False
+  use_lab: True
+  pretrained: True
+  local_model_dir: ./pretrain/hgnetv2/
+
+HybridEncoder:
+  in_channels: [256, 512, 1024]
+  feat_strides: [8, 16, 32]
+  hidden_dim: 256
+  use_encoder_idx: [2]
+  num_encoder_layers: 1
+  nhead: 8
+  dim_feedforward: 1024
+  dropout: 0.
+  enc_act: gelu
+  expansion: 0.5
+  depth_mult: 0.34
+  act: silu
+
+ChemCriterion:
+  box_criterion:
+    type: RTv4Criterion
+    num_classes: 18
+    weight_dict: {loss_vfl: 1, loss_bbox: 5, loss_giou: 2}
+    losses: ['vfl', 'boxes']
+    alpha: 0.75
+    gamma: 2.0
+    matcher:
+      type: HungarianMatcher
+      weight_dict: {cost_class: 2, cost_bbox: 5, cost_giou: 2}
+      alpha: 0.25
+      gamma: 2.0
+  line_criterion:
+    type: LineCriterion
+    num_classes: 7
+    weight_dict: {loss_line_focal: 1, loss_line_l1: 5, loss_line_rel: 2}
+    losses: ['focal', 'lines']
+    alpha: 0.25
+    gamma: 2.0
+    relative_length_eps: 0.005
+    matcher:
+      type: LineHungarianMatcher
+      weight_dict: {cost_class: 2, cost_line: 5}
+      alpha: 0.25
+      gamma: 2.0
+
+ChemPostProcessor:
+  box_postprocessor:
+    type: PostProcessor
+    num_classes: 18
+    use_focal_loss: True
+    num_top_queries: 300
+    remap_mscoco_category: False
+  line_num_classes: 7
+  use_focal_loss: True
+  num_top_queries: 300
+  line_num_top_queries: 300
+
+optimizer:
+  type: AdamW
+  params:
+    -
+      params: '^(?=.*backbone)(?!.*norm|bn).*$'
+      lr: 0.0001
+    -
+      params: '^(?=.*backbone)(?=.*norm|bn).*$'
+      lr: 0.0001
+      weight_decay: 0.
+    -
+      params: '^(?=.*(?:encoder|box_decoder|line_decoder))(?=.*(?:norm|bn|bias)).*$'
+      weight_decay: 0.
+  lr: 0.0002
+  betas: [0.9, 0.999]
+  weight_decay: 0.0001
+
+lrsheduler: flatcosine
+lr_gamma: 1.0
+warmup_iter: 500
+flat_epoch: 4000000
+no_aug_epoch: 0
+epoches: 72

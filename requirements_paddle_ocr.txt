@@ -1,0 +1,5 @@
+# Optional isolated Python 3.11 environment for PaddleOCR 2.x recognition.
+# Keep separate from the Python 3.12 bb2m training environment.
+numpy==1.26.4
+paddlepaddle==2.6.2
+paddleocr==2.8.1

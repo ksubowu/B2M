@@ -1,0 +1,163 @@
+__include__: [
+  './chem_dual_hgnetv2_s.yml',
+]
+
+# TODO3 skeleton:
+# Atom detection + bond relation prediction, replacing direct line detection.
+# Main inspirations:
+# - RelationFormer (ECCV 2022): joint object-relation tokens for image-to-graph generation
+# - EGTR (CVPR 2024): relation extraction from object-query self-attention + connectivity auxiliary task
+#
+# This skeleton keeps ChemEvaluator-compatible outputs via a relation postprocessor
+# that can project predicted relations back to line-like outputs for evaluation/visualization.
+# Backbone is upgraded from B0 -> B2 to support stronger object tokens and relation reasoning.
+
+model: ChemAtomBondRelationRTv4
+criterion: ChemAtomBondRelationCriterion
+postprocessor: ChemBondRelationPostProcessor
+
+output_dir: ./outputs/chem_atom_bond_relation_hgnetv2_b2_80e
+print_freq: 50
+checkpoint_freq: 4
+
+sync_bn: True
+find_unused_parameters: False
+use_amp: False
+use_ema: False
+
+train_dataloader:
+  total_batch_size: 4
+
+val_dataloader:
+  total_batch_size: 4
+
+ChemAtomBondRelationRTv4:
+  backbone: HGNetv2
+  encoder: HybridEncoder
+  atom_decoder:
+    type: RTDETRTransformerv2
+    num_classes: 18
+    feat_channels: [256, 256, 256]
+    feat_strides: [8, 16, 32]
+    hidden_dim: 256
+    num_levels: 3
+    num_layers: 6
+    eval_idx: -1
+    num_queries: 300
+    num_denoising: 100
+    label_noise_ratio: 0.5
+    box_noise_scale: 1.0
+  bond_relation_head:
+    type: BondRelationHead
+    hidden_dim: 256
+    num_relation_classes: 7
+    topk_atom_queries: 96
+    relation_token: True
+    extract_from_decoder_self_attention: True
+    connectivity_aux_loss: True
+    use_geometry_bias: True
+    geometry_features: ['center_delta', 'center_distance', 'box_iou', 'pair_angle']
+    pair_feature_mode: concat_absdiff_prod
+    allow_bidirectional_pairing: False
+    project_relations_to_line_endpoints: atom_centers
+
+eval_spatial_size: [640, 640]
+use_focal_loss: True
+num_top_queries: 300
+
+HGNetv2:
+  name: 'B2'
+  return_idx: [1, 2, 3]
+  freeze_at: -1
+  freeze_norm: False
+  use_lab: True
+  pretrained: True
+  local_model_dir: ./pretrain/hgnetv2/
+
+HybridEncoder:
+  in_channels: [384, 768, 1536]
+  feat_strides: [8, 16, 32]
+  hidden_dim: 256
+  use_encoder_idx: [1, 2]
+  num_encoder_layers: 1
+  nhead: 8
+  dim_feedforward: 1024
+  dropout: 0.
+  enc_act: gelu
+  expansion: 0.67
+  depth_mult: 0.67
+  act: silu
+
+ChemAtomBondRelationCriterion:
+  box_criterion:
+    type: RTv4Criterion
+    num_classes: 18
+    weight_dict: {loss_vfl: 1, loss_bbox: 5, loss_giou: 2}
+    losses: ['vfl', 'boxes']
+    alpha: 0.75
+    gamma: 2.0
+    matcher:
+      type: HungarianMatcher
+      weight_dict: {cost_class: 2, cost_bbox: 5, cost_giou: 2}
+      alpha: 0.25
+      gamma: 2.0
+  relation_criterion:
+    type: BondRelationCriterion
+    num_relation_classes: 7
+    losses: ['relation_focal', 'connectivity', 'pair_geometry', 'endpoint_consistency']
+    weight_dict:
+      {
+        loss_relation_focal: 1,
+        loss_connectivity: 1.5,
+        loss_pair_geometry: 1,
+        loss_endpoint_consistency: 1,
+      }
+    alpha: 0.25
+    gamma: 2.0
+    positive_pair_strategy: gt_connected_or_hard_negative
+    negative_to_positive_ratio: 3
+    matcher:
+      type: BondRelationMatcher
+      weight_dict: {cost_relation: 2, cost_connectivity: 1, cost_geometry: 1}
+      alpha: 0.25
+      gamma: 2.0
+
+ChemBondRelationPostProcessor:
+  box_postprocessor:
+    type: PostProcessor
+    num_classes: 18
+    use_focal_loss: True
+    num_top_queries: 300
+    remap_mscoco_category: False
+  num_relation_classes: 7
+  topk_atom_queries: 96
+  topk_relation_pairs: 128
+  atom_score_thresh: 0.25
+  relation_score_thresh: 0.15
+  connectivity_score_thresh: 0.20
+  project_pairs_to_lines: True
+  line_projection_mode: atom_centers
+
+optimizer:
+  type: AdamW
+  params:
+    -
+      params: '^(?=.*backbone)(?!.*norm|bn).*$'
+      lr: 0.00002
+    -
+      params: '^(?=.*backbone)(?=.*norm|bn).*$'
+      lr: 0.00002
+      weight_decay: 0.
+    -
+      params: '^(?=.*(?:encoder|atom_decoder|bond_relation_head))(?=.*(?:norm|bn|bias)).*$'
+      weight_decay: 0.
+  lr: 0.0002
+  betas: [0.9, 0.999]
+  weight_decay: 0.0001
+
+lrsheduler: flatcosine
+lr_gamma: 1.0
+warmup_iter: 500
+flat_epoch: 4000000
+no_aug_epoch: 0
+epoches: 80

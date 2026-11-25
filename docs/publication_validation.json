@@ -1,0 +1,9 @@
+{
+  "source_tests": 34,
+  "syntax": "all Python files parsed and shell scripts passed bash -n",
+  "secret_patterns": "no matches",
+  "inference": "One existing validation image: copied and original prediction JSON exactly equal; copied joint checkpoint had nonexistent config.base",
+  "weights_in_git": false,
+  "renderer_doctor": "passed; bundled Indigo pixel coordinates verified",
+  "copied_source_files": 323
+}

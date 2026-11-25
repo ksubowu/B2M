@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /mnt/hdd2/bo/work/cvs/portable_mp123_human_band_transfer_20261110/project
+export CUDA_VISIBLE_DEVICES=4 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2
+trap 'code=$?; echo "$code" > /mnt/hdd2/bo/work/cvs/portable_mp123_human_band_transfer_20261110/project/runs/v6_continue_20261121/formal_exit_code' EXIT
+exec_log=/mnt/hdd2/bo/work/cvs/portable_mp123_human_band_transfer_20261110/project/runs/v6_continue_20261121_formal.log
+taskset -c 128,130,132,134,136,138,140,142,144,146,148,150 nice -n 5 /home/bo/bo/miniconda3/envs/bb2m/bin/python -u -m band_training.train_v6_continue --dataset /mnt/hdd2/bo/work/cvs/chemcv_data/real/indigo_diverse_v6_20261121/dataset --preflight /mnt/hdd2/bo/work/cvs/portable_mp123_human_band_transfer_20261110/project/runs/v6_continue_20261121/preflight --init /mnt/hdd2/bo/work/cvs/portable_mp123_human_band_transfer_20261110/project/runs/line_neighborhood_formal_v2_20261119/best_joint.pt --output /mnt/hdd2/bo/work/cvs/portable_mp123_human_band_transfer_20261110/project/runs/v6_continue_20261121/formal --epochs 6 --batch-size 16 --workers 8 --freeze-feature-steps 500 --warmup-steps 300 --patience 2 --checkpoint-every 2000 --memory-fraction 0.4 > "$exec_log" 2>&1

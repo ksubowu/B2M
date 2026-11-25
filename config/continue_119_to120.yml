@@ -1,0 +1,7 @@
+__include__: ['train_mp123_full.yml']
+
+# checkpoint0119.pth has last_epoch=119; run epoch 120.
+epoches: 121
+checkpoint_freq: 5
+early_stopping:
+  enabled: false

@@ -1,0 +1,34 @@
+# Local environments and caches
+.venvs/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.cache/
+# Private inputs, annotations, weights, and generated runs
+/runs/
+/weights/
+/data/
+/dataset/
+/webapp_data/
+/pretrain/
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.npz
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Editor/OS files
+.idea/
+.vscode/
+.DS_Store

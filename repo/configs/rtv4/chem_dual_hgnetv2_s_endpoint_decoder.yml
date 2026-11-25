@@ -1,0 +1,171 @@
+__include__: [
+  './chem_dual_hgnetv2_s.yml',
+]
+
+# TODO2 skeleton:
+# Endpoint-aware line branch inspired by:
+# - HAWP (CVPR 2020): junction / line proposal + verification
+# - LETR (CVPR 2021): endpoint distance loss with transformer line decoding
+# - ScaleLSD / recent LSD work: endpoint-field style supervision for robust line geometry
+#
+# This is now a minimal trainable version.
+# It intentionally upgrades the backbone from B0 -> B2 because the current box branch
+# is already near-saturated while the bond branch remains capacity-limited.
+# The implementation reuses the current transformer line decoder and adds
+# endpoint-aware matching and endpoint-oriented losses.
+
+model: ChemRTv4Endpoint
+criterion: ChemEndpointCriterion
+postprocessor: ChemEndpointPostProcessor
+
+output_dir: ./outputs/chem_dual_hgnetv2_b2_endpoint_decoder_80e
+print_freq: 50
+checkpoint_freq: 5
+
+sync_bn: True
+find_unused_parameters: True
+use_amp: False
+use_ema: False
+
+train_dataloader:
+  total_batch_size: 16
+
+val_dataloader:
+  total_batch_size: 16
+
+ChemRTv4Endpoint:
+  backbone: HGNetv2
+  encoder: HybridEncoder
+  box_decoder:
+    type: RTDETRTransformerv2
+    num_classes: 18
+    feat_channels: [256, 256, 256]
+    feat_strides: [8, 16, 32]
+    hidden_dim: 256
+    num_levels: 3
+    num_layers: 6
+    eval_idx: -1
+    num_queries: 300
+    num_denoising: 100
+    label_noise_ratio: 0.5
+    box_noise_scale: 1.0
+  line_decoder:
+    type: EndpointLineTransformer
+    num_classes: 7
+    feat_channels: [256, 256, 256]
+    feat_strides: [8, 16, 32]
+    hidden_dim: 256
+    num_levels: 3
+    num_layers: 6
+    eval_idx: -1
+    num_queries: 300
+    num_endpoint_queries: 300
+    num_denoising: 0
+    line_representation: endpoints
+    endpoint_heatmap_stride: 4
+    use_deformable_sampling: True
+    predict_endpoint_heatmap: False
+    predict_endpoint_offset: False
+    predict_connectivity: False
+    snap_endpoint_to_atom_center_during_train: True
+
+eval_spatial_size: [640, 640]
+use_focal_loss: True
+num_top_queries: 300
+
+HGNetv2:
+  name: 'B2'
+  return_idx: [1, 2, 3]
+  freeze_at: -1
+  freeze_norm: False
+  use_lab: True
+  pretrained: True
+  local_model_dir: ./pretrain/hgnetv2/
+
+HybridEncoder:
+  in_channels: [384, 768, 1536]
+  feat_strides: [8, 16, 32]
+  hidden_dim: 256
+  use_encoder_idx: [1, 2]
+  num_encoder_layers: 1
+  nhead: 8
+  dim_feedforward: 1024
+  dropout: 0.
+  enc_act: gelu
+  expansion: 0.67
+  depth_mult: 0.67
+  act: silu
+
+ChemEndpointCriterion:
+  box_criterion:
+    type: RTv4Criterion
+    num_classes: 18
+    weight_dict: {loss_vfl: 1, loss_bbox: 5, loss_giou: 2}
+    losses: ['vfl', 'boxes']
+    alpha: 0.75
+    gamma: 2.0
+    matcher:
+      type: HungarianMatcher
+      weight_dict: {cost_class: 2, cost_bbox: 5, cost_giou: 2}
+      alpha: 0.25
+      gamma: 2.0
+  line_criterion:
+    type: EndpointLineCriterion
+    num_classes: 7
+    losses: ['focal', 'lines', 'endpoints', 'endpoint_atom']
+    weight_dict:
+      {
+        loss_line_focal: 1,
+        loss_line_l1: 4,
+        loss_line_rel: 2,
+        loss_line_endpoint: 2,
+        loss_line_endpoint_atom: 1.5,
+      }
+    alpha: 0.25
+    gamma: 2.0
+    endpoint_positive_radius: 4.0
+    relative_length_eps: 0.005
+    matcher:
+      type: EndpointLineHungarianMatcher
+      weight_dict: {cost_class: 2, cost_line: 4, cost_endpoint: 3}
+      alpha: 0.25
+      gamma: 2.0
+
+ChemEndpointPostProcessor:
+  box_postprocessor:
+    type: PostProcessor
+    num_classes: 18
+    use_focal_loss: True
+    num_top_queries: 300
+    remap_mscoco_category: False
+  line_num_classes: 7
+  use_focal_loss: True
+  num_top_queries: 300
+  line_num_top_queries: 300
+  endpoint_score_thresh: 0.15
+  snap_to_atom_centers: True
+  atom_center_snap_radius: 24.0
+
+optimizer:
+  type: AdamW
+  params:
+    -
+      params: '^(?=.*backbone)(?!.*norm|bn).*$'
+      lr: 0.00002
+    -
+      params: '^(?=.*backbone)(?=.*norm|bn).*$'
+      lr: 0.00002
+      weight_decay: 0.
+    -
+      params: '^(?=.*(?:encoder|box_decoder|line_decoder))(?=.*(?:norm|bn|bias)).*$'
+      weight_decay: 0.
+  lr: 0.0002
+  betas: [0.9, 0.999]
+  weight_decay: 0.0001
+
+lrsheduler: flatcosine
+lr_gamma: 1.0
+warmup_iter: 500
+flat_epoch: 4000000
+no_aug_epoch: 0
+epoches: 80

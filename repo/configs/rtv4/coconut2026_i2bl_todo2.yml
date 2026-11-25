@@ -1,0 +1,30 @@
+__include__: [
+  './chem_dual_hgnetv2_s_endpoint_decoder.yml',
+]
+
+# 基于 I2BL_todo2 配置，在 coconut2026 数据上继续训练
+# 数据来自 10% 拆分后的 val 集（约 28k 张）
+
+output_dir: ./outputs/coconut2026_i2bl_todo2_finetune
+
+# 覆盖数据路径，指向拆分后的目录
+train_dataloader:
+  dataset:
+    img_folder: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/images/train
+    atom_ann_file: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/annotations/train_atom_charge.json
+    bond_ann_file: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/annotations/train_bonds.json
+    rgroup_ann_file: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/annotations/train_rgroups.json
+
+val_dataloader:
+  dataset:
+    img_folder: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/images/val
+    atom_ann_file: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/annotations/val_atom_charge.json
+    bond_ann_file: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/annotations/val_bonds.json
+    rgroup_ann_file: /recovery/bo/pys/rtv4_ac_b/LLM_vs/coconut2026/i2bl_todo2_coconut_split/annotations/val_rgroups.json
+
+# 从 I2BL_todo2 的权重继续训练
+resume: /recovery/bo/pys/rtv4_ac_b/chemrtv4/RT-DETRv4/outputs/chem_dual_hgnetv2_s_endpoint_decoder_80e/last.pth
+
+# 训练参数调整（finetune 阶段）
+epoches: 40
+lr: 0.0001  # 降低学习率

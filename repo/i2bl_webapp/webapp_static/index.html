@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>I2BL + Ketcher</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="hero">
+      <p class="eyebrow">Chemical Image Recognition + Manual Correction</p>
+      <h1>I2BL + Ketcher</h1>
+      <p class="intro" id="appIntro">
+        点击下方原始样本可直接恢复已有人工标注；核对原子、电荷和键后点击 Fix 保存新的确认版本。也可上传或粘贴图片进行识别。
+      </p>
+    </section>
+
+    <section class="workspace">
+      <div class="panel controls">
+        <label class="uploader">
+          <span>Structure Image</span>
+          <input id="imageInput" type="file" accept="image/*">
+        </label>
+        <div class="paste-zone">
+          <button id="pasteButton" class="paste-button" type="button" aria-label="Paste image button">
+            <strong>Paste Image</strong>
+            <span>Click here, then press Ctrl+V or Cmd+V to paste a screenshot from the clipboard.</span>
+          </button>
+          <textarea id="pasteInput" class="paste-input" aria-label="Paste image input"></textarea>
+        </div>
+        <div class="cutoff-grid">
+          <label class="uploader">
+            <span>Atom Cutoff</span>
+            <input id="atomCutoffInput" type="number" min="0" max="1" step="0.01" value="0.50">
+          </label>
+          <label class="uploader">
+            <span>Charge Cutoff</span>
+            <input id="chargeCutoffInput" type="number" min="0" max="1" step="0.01" value="0.50">
+          </label>
+          <label class="uploader">
+            <span>Bond Cutoff</span>
+            <input id="bondCutoffInput" type="number" min="0" max="1" step="0.01" value="0.40">
+          </label>
+        </div>
+        <div class="nms-grid">
+          <label class="uploader">
+            <span>Atom NMS</span>
+            <input id="atomNmsInput" type="number" min="0" max="1" step="0.01" value="0.55">
+          </label>
+          <label class="uploader">
+            <span>Charge NMS</span>
+            <input id="chargeNmsInput" type="number" min="0" max="1" step="0.01" value="0.55">
+          </label>
+        </div>
+        <button id="runButton" type="button">Run Recognition</button>
+        <p id="status" class="status">Waiting for image upload.</p>
+        <img id="preview" class="preview" alt="Image preview">
+        <div class="panel examples-card">
+          <div class="panel-header">
+            <h2>Examples</h2>
+            <span id="examplesState" class="tag tag-subtle">Loading</span>
+          </div>
+          <div id="examplesGrid" class="examples-grid">
+            <p class="examples-empty">Loading examples...</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel editor-panel">
+        <div class="panel-header">
+          <h2>Ketcher Editor</h2>
+          <div class="panel-actions">
+            <button id="loadOriginalButton" class="secondary-button source-button" type="button">Original</button>
+            <button id="loadExpandedButton" class="secondary-button source-button" type="button">Expanded</button>
+            <button id="loadPreferredButton" class="secondary-button source-button" type="button">Preferred</button>
+            <span id="editorState" class="tag">Checking editor</span>
+          </div>
+        </div>
+        <div class="panel smiles-card">
+          <div class="panel-header">
+            <h2>Recognition Result</h2>
+            <span id="molfileSourceState" class="tag tag-subtle">Molfile source: none</span>
+          </div>
+          <dl class="smiles-grid">
+            <div>
+              <dt>Skeleton SMILES</dt>
+              <dd id="skeletonSmiles">-</dd>
+            </div>
+            <div>
+              <dt>Expanded SMILES</dt>
+              <dd id="expandedSmiles">-</dd>
+            </div>
+          </dl>
+        </div>
+        <div class="panel ocr-panel">
+          <div class="panel-header">
+            <h2>OCR Editors</h2>
+            <div class="panel-actions">
+              <button id="ocrFixButton" class="secondary-button" type="button">Fix</button>
+              <span id="ocrState" class="tag tag-subtle">No OCR</span>
+            </div>
+          </div>
+          <div class="ocr-table-wrap">
+            <table class="ocr-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Matched Atom</th>
+                  <th>BBox</th>
+                  <th>Original OCR</th>
+                  <th>Scaled OCR</th>
+                  <th>Final Label</th>
+                  <th>Final Score</th>
+                </tr>
+              </thead>
+              <tbody id="ocrBody">
+                <tr>
+                  <td colspan="7" class="ocr-empty">No OCR results yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="selection-help">Edit the final label and score, then click Fix to save these corrections and the current Ketcher structure.</p>
+        </div>
+        <iframe id="ketcherFrame" title="Ketcher editor"></iframe>
+        <div id="editorFallback" class="editor-fallback" hidden>
+          <p>Ketcher assets were not found.</p>
+          <p>
+            Build Ketcher locally and place the generated app under
+            <code>i2bl_webapp/ketcher</code>, or set <code>I2BL_KETCHER_DIR</code>.
+          </p>
+        </div>
+        <div class="panel detection-panel">
+          <div class="panel-header">
+            <h2>Detection Editors</h2>
+            <div class="panel-actions">
+              <button id="addAtomButton" class="secondary-button" type="button">Add Atom</button>
+              <button id="editAtomButton" class="secondary-button" type="button">Edit Atom</button>
+              <button id="addChargeButton" class="secondary-button" type="button">Add Charge</button>
+              <button id="editChargeButton" class="secondary-button" type="button">Edit Charge</button>
+              <button id="addBondButton" class="secondary-button" type="button">Add Bond</button>
+              <button id="editBondButton" class="secondary-button" type="button">Edit Bond</button>
+              <button id="deleteDetectionButton" class="secondary-button" type="button">Delete Selected</button>
+              <button id="loadDetectionHistoryButton" class="secondary-button" type="button">Load History</button>
+              <button id="updateDetectionsButton" class="secondary-button" type="button">Update</button>
+              <button id="fixButton" class="secondary-button" type="button">Fix</button>
+              <span id="detectionState" class="tag tag-subtle">No detections</span>
+            </div>
+          </div>
+          <div class="detection-grid">
+            <div class="overlay-panel">
+              <div class="overlay-header">
+                <h3>Atom + Charge (ac)</h3>
+                <span id="acCount" class="overlay-count">0 items</span>
+              </div>
+              <svg id="acEditorSvg" class="detection-svg" viewBox="0 0 1000 1000"></svg>
+            </div>
+            <div class="overlay-panel">
+              <div class="overlay-header">
+                <h3>Bond Bands (b)</h3>
+                <span id="bondCount" class="overlay-count">0 items</span>
+              </div>
+              <svg id="bondEditorSvg" class="detection-svg" viewBox="0 0 1000 1000"></svg>
+            </div>
+          </div>
+          <div class="split detection-bottom">
+            <div>
+              <h2>Selected Detection</h2>
+              <div id="selectionMeta" class="selection-meta">Nothing selected.</div>
+              <p class="selection-help">Load History restores the latest saved boxes and bands for this image. Update rebuilds the molecule from the current edits and refreshes Ketcher. Fix also saves the image and edits as ground truth. Equivalent labels are normalized (for example, Me → CH3 and = → double) while the original label is retained.</p>
+            </div>
+            <div>
+              <h2>Edited Detection JSON</h2>
+              <textarea id="detectionsOutput" spellcheck="false"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="diagnostics">
+          <div class="diagnostics-header">
+            <h3>Editor Diagnostics</h3>
+            <span id="diagnosticsState" class="tag tag-subtle">Idle</span>
+          </div>
+          <p id="diagnosticsHint" class="diagnostics-hint">
+            The panel records iframe load failures, timeouts, and Ketcher runtime errors.
+          </p>
+          <pre id="diagnosticsLog" class="diagnostics-log">No editor events yet.</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="results">
+      <div class="panel result-detail-grid">
+        <div>
+          <div class="panel-header">
+            <h2>Alignment Compare</h2>
+            <span id="alignmentState" class="tag tag-subtle">No alignment data</span>
+          </div>
+          <div class="overlay-panel compare-panel">
+            <svg id="alignmentCompareSvg" class="detection-svg compare-svg" viewBox="0 0 1000 1000"></svg>
+            <div class="compare-legend">
+              <span class="legend-item"><span class="legend-dot legend-original"></span>Original</span>
+              <span class="legend-item"><span class="legend-dot legend-preferred"></span>Preferred</span>
+              <span class="legend-item"><span class="legend-line"></span>Shift</span>
+            </div>
+          </div>
+          <div id="alignmentMeta" class="selection-meta compare-meta">No comparison available.</div>
+        </div>
+        <div>
+          <h2>Molfile</h2>
+          <textarea id="molfileOutput" spellcheck="false"></textarea>
+        </div>
+        <div>
+          <h2>Graph JSON</h2>
+          <textarea id="graphOutput" spellcheck="false"></textarea>
+        </div>
+      </div>
+
+    </section>
+
+    <footer class="page-footer">
+      <p>Backend powered by FastAPI · the Optical Chemical Structure Recognition (OCSR) developed and maintained by bowen</p>
+      <p>Questions or Suggestions or Help? Contact <a href="mailto:wuzxmu@gmail.com">wuzxmu@gmail.com</a></p>
+    </footer>
+  </main>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
