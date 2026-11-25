@@ -14,13 +14,12 @@ replace the licenses or copyright notices of bundled third-party components.
 - **Ketcher browser assets** (`repo/i2bl_webapp/ketcher`): bundled editor assets
   and dependency license texts are preserved, including `*.LICENSE.txt` files.
   These assets are not relicensed by B2M's root MIT license.
-- **Indigo renderer and MolScribe-derived bindings**
-  (`chem_structure_prep/chem_prep/_vendor`): retained native libraries and
-  bindings carry their original licenses. See
-  `chem_structure_prep/THIRD_PARTY_NOTICES.md`, `chem_structure_prep/licenses`,
-  and `chem_structure_prep/chem_prep/_licenses`.
-- **Fonts** bundled with the renderer: original DejaVu and Liberation license
-  notices are retained in the renderer's license directories.
+
+The Indigo/MolScribe renderer, fonts, and dataset-generation code are maintained
+in the separate [chem-structure-prep](https://github.com/ksubowu/chem-structure-prep)
+repository. They are not bundled in this B2M source tree. Optional complete
+molecular graph evaluation imports that separately installed chemistry package;
+its own third-party notices apply to those components.
 
 Model checkpoints, OCR model files, molecular datasets, human annotations, and
 experimental example images are not included in this source publication.

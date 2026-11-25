@@ -3,8 +3,6 @@ from pathlib import Path
 import networkx as nx
 from .molecular_graph_metrics import (property_graph,exact_property_match,native_graph,fold_expanded_reference,normalize_text)
 
-DATA=Path('/mnt/hdd2/bo/work/cvs/chemcv_data/real/indigo_full_v3_20261116')
-sys.path.insert(0,str(DATA/'generator_snapshot'))
 from chem_prep.backend import Indigo
 
 
@@ -62,12 +60,17 @@ class MolecularGraphMetricsTests(unittest.TestCase):
             self.assertIsNone(exact_property_match(property_graph(self.ig,atoms,edges),reference))
 
     def test_native_reference_formats_and_rsite_taxonomy(self):
-        import csv,json
+        from rdkit import Chem
         from .audit_graph_references import reference_from_annotation
-        with (DATA/'val.csv').open() as f:rows=list(csv.DictReader(f))
-        samples=[rows[0],next(r for r in rows if r['sample_id']=='color/CLEF/US20040229890A1_p0022_x1621_y2943_c00101')]
-        for row in samples:
-            ann=json.loads((DATA/row['annotation']).read_text());_,atoms,bonds=reference_from_annotation(self.ig,ann)
+        # Generated in-memory references exercise both molfile formats without
+        # depending on a private validation dataset or renderer snapshot.
+        molecule=Chem.MolFromSmiles('C[W].[Y].[Ar].*')
+        symbols=['C','W','Y','Ar','R11']
+        for v3000 in [False,True]:
+            ann=dict(rendered_molfile=Chem.MolToMolBlock(molecule,forceV3000=v3000),
+                atoms=[dict(id=i,symbol=symbol,formal_charge=0,is_pseudoatom=i==4) for i,symbol in enumerate(symbols)],
+                bonds=[dict(source=b.GetBeginAtomIdx(),target=b.GetEndAtomIdx()) for b in molecule.GetBonds()])
+            _,atoms,bonds=reference_from_annotation(self.ig,ann)
             self.assertEqual(len(atoms),len(ann['atoms']));self.assertEqual(len(bonds),len(ann['bonds']))
             for atom in atoms:
                 if atom['symbol']=='R11':self.assertTrue(atom['is_group'])

@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from .model import BandDecoder,band_loss,targets_for,decode
 from .geometry import link,edge_key,polygon_iou,suppress,AtomCenterIndex,link_many
-from .prepare import region_quad
+from .region_geometry import region_quad
 
 
 class Invariants(unittest.TestCase):

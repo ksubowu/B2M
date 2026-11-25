@@ -53,7 +53,9 @@ def main():
         for s in samples:
             fs=functional_samples[s['sample_id']]
             writer.writerow(dict(sample_id=s['sample_id'],**s['components'],graph_star_exact=fs['graph_star_exact'],graph_ocr_exact=fs['graph_ocr_exact'],has_dummy=fs['has_alias']))
-    dataset=Path(cache['dataset']);sys.path.insert(0,str(dataset/'generator_snapshot'))
+    dataset=Path(cache['dataset'])
+    from .dataset_runtime import install_generator_path
+    install_generator_path(dataset)
     from chem_prep.backend import Indigo
     ig=Indigo();display=nx.Graph();display.add_node(0,symbol='C',charge=0,opaque=False);display.add_node(1,symbol='CF3',charge=0,opaque=True);display.add_edge(0,1,label=0)
     examples=[]

@@ -1,7 +1,7 @@
 {
   "snapshot_date": "2026-11-25",
   "source": "portable_mp123_human_band_transfer_20261110/project",
-  "notes": "Original project left unchanged. Renderer snapshot and v6 generator source are included separately. Data, environment directories, weights and per-sample results are excluded.",
+  "notes": "Model training and inference repository. Dataset rendering and annotation preparation moved to the independent data repository; original development workspace remains unchanged.",
   "files": [
     {
       "path": "band_training/__init__.py",
@@ -148,7 +148,7 @@
     },
     {
       "path": "band_training/dataset_runtime.py",
-      "sha256": "1fbf0d7dc56efc244c75dd1ae46f1310819ccad19c8908ff0a79e758bc99cdf9",
+      "sha256": "f7898f643cbb8780d67bc2a0d955dc57419fefccc08a713327013256ca78130e",
       "source_sha256": "51a64af5ba3795be8d8ecb517c8b448c11c8b371d44d89e837aa1e82f68c5098",
       "status": "publication_portability_change"
     },
@@ -262,9 +262,9 @@
     },
     {
       "path": "band_training/finalize_graph_metrics.py",
-      "sha256": "5a308e05dc0ddab57c29f17f6a7388da00c52a47588e4cf5df77736bfb79ded1",
+      "sha256": "286c0d9659b0d042b6f109e527aa61fb141468037f27bbd1be591a93a02d38f3",
       "source_sha256": "5a308e05dc0ddab57c29f17f6a7388da00c52a47588e4cf5df77736bfb79ded1",
-      "status": "copied"
+      "status": "publication_portability_change"
     },
     {
       "path": "band_training/finalize_gt_dataset_eval.py",
@@ -379,12 +379,6 @@
       "sha256": "db9992da31eed1cf2b375106b3729271f1b652ccedbad8780c3c632b100cf3ea",
       "source_sha256": "9293c5afaab9b17d84d6ae6eab384d26f1c153b31c1e18ec69bd93ad118f56d8",
       "status": "publication_portability_change"
-    },
-    {
-      "path": "band_training/prepare.py",
-      "sha256": "c00787fb7f5ed9e91129d6482d4153901c67d736b36394ca275c7f04dbd73c52",
-      "source_sha256": "c00787fb7f5ed9e91129d6482d4153901c67d736b36394ca275c7f04dbd73c52",
-      "status": "copied"
     },
     {
       "path": "band_training/prepare_paddle_ocr_requests.py",
@@ -550,9 +544,9 @@
     },
     {
       "path": "band_training/test_invariants.py",
-      "sha256": "07824dbb75e98076afed5c5acde36497274257503fb93b93b7e4e4e9480a03ed",
+      "sha256": "1eeacdbaeebc0024a05e377d4a5804ce0a10e484322550ec96e64b7ddd7db5d6",
       "source_sha256": "07824dbb75e98076afed5c5acde36497274257503fb93b93b7e4e4e9480a03ed",
-      "status": "copied"
+      "status": "publication_portability_change"
     },
     {
       "path": "band_training/test_line_neighborhood.py",
@@ -568,9 +562,9 @@
     },
     {
       "path": "band_training/test_molecular_graph_metrics.py",
-      "sha256": "b8023a345342ebdbfc9517dfd8a443cce2b51360521ddcb34117269cc986ffdb",
+      "sha256": "e0e19f837917417e9b8ebf6eb71b09421d83b4fbb21fbd5d23c174d01f5b9376",
       "source_sha256": "b8023a345342ebdbfc9517dfd8a443cce2b51360521ddcb34117269cc986ffdb",
-      "status": "copied"
+      "status": "publication_portability_change"
     },
     {
       "path": "band_training/test_paddle_ocr_replay.py",
@@ -1804,7 +1798,7 @@
     },
     {
       "path": "scripts/check_source.sh",
-      "sha256": "f4db8fd117d9cdf58a39c4037ffa984d712bfedd5b722bd83afbe8055c88d408",
+      "sha256": "110aea961b08f19187ae8790d7756900ba419ce7ca519f0e33f8ca217a1ae58c",
       "status": "publication_addition_or_archived_launcher"
     },
     {
@@ -1866,12 +1860,6 @@
       "status": "publication_addition_or_archived_launcher"
     },
     {
-      "path": "scripts/prepare_pubchem_bands.py",
-      "sha256": "f3a008fe4ac60252c4b052796365bb5509f61299f138375f5fda5175684eed9e",
-      "source_sha256": "f3a008fe4ac60252c4b052796365bb5509f61299f138375f5fda5175684eed9e",
-      "status": "copied"
-    },
-    {
       "path": "scripts/restore_webapp_examples.py",
       "sha256": "0a11b6f4fe4c84369f0a178a4e65935e5a43b7e34d43af648c8eb35e2e93e79e",
       "source_sha256": "0a11b6f4fe4c84369f0a178a4e65935e5a43b7e34d43af648c8eb35e2e93e79e",
@@ -1930,6 +1918,17 @@
       "sha256": "fa57bc3a14f967ede482850fc403afd0f95aeadf44f8e2aaa9747dde0003c2d7",
       "source_sha256": "fa57bc3a14f967ede482850fc403afd0f95aeadf44f8e2aaa9747dde0003c2d7",
       "status": "copied"
+    },
+    {
+      "path": "band_training/region_geometry.py",
+      "sha256": "70d22cb2b7867129e51b98a0ceefc69cc4628b07d4c77bdc39caf49f47c5c272",
+      "status": "repository_split_support"
+    },
+    {
+      "path": "band_training/test_dataset_runtime.py",
+      "sha256": "6a49257708ad2b190ed52758fd52287f94445209e323eab179b2ecd50b1bf49f",
+      "status": "repository_split_support"
     }
-  ]
+  ],
+  "data_preparation_repository": "https://github.com/ksubowu/chem-structure-prep"
 }

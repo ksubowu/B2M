@@ -1,94 +1,95 @@
 # B2M — Bond Bands to Molecular Graphs
 
-B2M is a research implementation for chemical structure image recognition. It
-combines atom/charge **boxes** with independently scored bond **lines** and
-**bands**, then assembles a molecular graph using predicted geometry.
+B2M 用于化学结构图片的模型训练和预测：检测 atom/charge boxes，分别预测带 score
+的 bond lines 和 bands，再通过几何关系组装分子图。line 端点表达连接位置，band
+区域与类别表达单键、双键、三键、芳香键、实楔键和虚楔键的视觉特征。
 
-B2M 将化学结构图片识别为分子图：atom/charge boxes 定位原子和电荷，line
-端点表达连接位置，band 区域及类别表达化学键的绘图特征。两种 bond head
-分别输出 score；组图通过坐标关联完成，不需要模型输出 atom index。
+**训练数据的生成、绘图及标注准备在独立仓库
+[chem-structure-prep](https://github.com/ksubowu/chem-structure-prep)。**
+本仓库只消费已准备好的图片与标注，不包含数据集和模型权重。
 
-## Architecture
-
-- 13 atom categories: `other, C, O, N, Cl, Br, S, F, B, I, P, H, Si`.
-- 5 charge categories: `-4, -2, -1, +1, +2` (not all have training examples).
-- 6 bond categories: `single, double, triple, aromatic, wedge, dash`.
-- Independent line and band heads share spatial features and instance queries.
-  Lines predict ordered endpoints and a presence score. Bands predict a region,
-  a presence score, and bond type.
-- Postprocessing links line endpoints to predicted atom boxes, groups duplicate
-  hypotheses by atom pair, selects band evidence, handles wedge/dash direction,
-  and associates charge boxes. Ground-truth atom IDs are not inference inputs.
-- Optional molecular label evaluation uses **PaddleOCR English PP-OCRv4**, crop
-  scales 1/2/3/4 and margins 1/3, followed by normalized-text voting.
-
-## Included source
-
-| Path | Purpose |
-| --- | --- |
-| `band_training/` | Current box/line/band training, graph assembly, evaluation, diagnostics and tests |
-| `chem_structure_prep/` | Portable Indigo rendering and box/line/band annotation preparation |
-| `data_preparation/v6/` | Historical v6 dataset generation and validation scripts |
-| `pair_training/` | Earlier pair-model experiments and shared utilities |
-| `repo/engine/` | Bundled detection engine; retains Apache-2.0 licensing |
-| `repo/i2bl_webapp/` | Historical manual annotation/review WebApp and Ketcher assets |
-| `config/` | Model and training configurations |
-| `scripts/` | Launchers; `scripts/experiments/` preserves historical machine-specific launch examples |
-| `docs/benchmarks/` | Aggregate historical metrics and plots, without molecular sample data |
-
-Training data, manually reviewed annotations, checkpoints, OCR model weights,
-local environments, and run directories are **not** uploaded. Renderer toy
-examples and required native renderer/font assets are included with notices.
-
-## Environment
-
-The working training environment was Python 3.12 with PyTorch 2.10 / torchvision
-0.25, CUDA 12.8, NumPy 1.26.4, and RDKit. A pinned snapshot is provided:
+## 1. 安装模型环境
 
 ```bash
+git clone https://github.com/ksubowu/B2M.git
+cd B2M
 conda env create -f environment-bb2m.yml
 conda activate bb2m
-python -m pip install -e ./chem_structure_prep
-bash scripts/check_source.sh
 ```
 
-`environment-bb2m.yml` is the tested machine's environment snapshot, not a
-cross-platform lockfile. The bundled modified Indigo backend supports Linux
-x86_64. The core detection pipeline requires separately supplied model weights.
+`environment-bb2m.yml` 是已有 Linux/CUDA 训练环境的版本快照：Python 3.12、
+PyTorch 2.10 / torchvision 0.25、CUDA 12.8。其它平台需调整对应 PyTorch 构建。
 
-Keep PaddleOCR 2.x in its separate Python 3.11 environment:
+如果需要训练时的完整分子图评估，还需安装独立化学工具包作为图校验后端，
+无需运行其数据生成命令：
 
 ```bash
+python -m pip install git+https://github.com/ksubowu/chem-structure-prep.git
 conda create -n b2m-ocr python=3.11 pip
 conda run -n b2m-ocr python -m pip install -r requirements_paddle_ocr.txt
 ```
 
-For training-time OCR validation, set `B2M_PADDLE_PYTHON` to that environment's
-Python executable and `B2M_PADDLE_MODELS` to a directory containing
-`en_source/inference.pdmodel` and `en_source/inference.pdiparams`. Alternatively,
-use `.venvs/paddleocr311/bin/python` and `webapp_data/paddleocr_models/`.
-The OCR worker requires local recognition model files; they are not downloaded
-or included by this repository.
+设置 `B2M_PADDLE_PYTHON` 为 `b2m-ocr` 环境的 Python 路径，
+`B2M_PADDLE_MODELS` 为本地 PaddleOCR 模型目录，其中应有
+`en_source/inference.pdmodel` 和 `en_source/inference.pdiparams`。
+默认路径分别为 `.venvs/paddleocr311/bin/python` 和
+`webapp_data/paddleocr_models/`。模型文件需另行提供。
+完整评估固定使用 PaddleOCR 英文多尺度＋投票；PaddleOCR 不与训练环境混装。
 
-## Prepare data
+## 2. 训练模型
+
+当前入口 `band_training.train_v6_continue` 是从兼容 joint 权重进行微调的流程，
+不支持直接从随机初始化开始。初始化权重 schema 应为
+`independent_scored_line_band_joint_v3`。
+
+### 已准备数据的输入要求
+
+- 数据集根目录包含固定的 `train.json`、`val.json` 和 `dataset_config.json`。
+  当前 preflight 使用后者的 `validation_reference.manifest_sha256` 验证冻结验证集。
+- 每条记录包含 `sample_id`、`group`、`image`、`annotation`、`band_target`、
+  `line_target`，资产路径相对于数据集根目录。
+- `annotation` 提供 atom/charge boxes 与参考连通关系；`band_target` 提供
+  `labels`、`quads`；`line_target` 提供对应的 `labels`、`lines`。
+- box、line、band 必须对齐同一张原图；loader 会对图片与坐标施加同一个
+  640×640 letterbox 变换。训练集与验证集不可有相同样本或分组。
+
+类别为 13 个 atom 类别、5 个 charge 类别、6 个 bond 类别。
+Atom：`other, C, O, N, Cl, Br, S, F, B, I, P, H, Si`；charge：
+`-4, -2, -1, +1, +2`（并非每类都有训练样本）；bond head 标签依次为
+`single, double, triple, aromatic, wedge, dash`。
 
 ```bash
-chem-prepare doctor
-chem-prepare init /tmp/b2m-example
-chem-prepare run --config /tmp/b2m-example/recipe.yaml
-# Existing unsplit datasets can receive paired bond line targets:
-chem-prepare add-lines --dataset /path/to/unsplit --output /path/to/with-lines
+# 检查现成训练集的目标、坐标与划分，并保存本次训练清单
+python -m band_training.preflight_v6 \
+  --dataset /path/to/dataset --output runs/preflight --workers 4
+# 如有已归档极小图，可额外传入：
+# --mini-hard-manifest /path/to/mini_hard/data_manifest.json
+
+# 训练 3 轮，关闭早停
+CUDA_VISIBLE_DEVICES=0 python -m band_training.train_v6_continue \
+  --dataset /path/to/dataset --preflight runs/preflight \
+  --init /path/to/best_joint.pt --output runs/experiment \
+  --epochs 3 --batch-size 16 --workers 4 --patience 0
 ```
 
-See [the renderer documentation](chem_structure_prep/README.md). The training
-manifest references images, atom/charge annotations, `band_target` and
-`line_target`. Coordinates must share the same image frame; the training loader
-applies the same 640×640 letterbox transform to pixels, boxes, lines, and bands.
-Do not pass a dataset without line targets to the scored joint trainer.
+可用参数：
 
-## Predict an image
+- `--freeze-feature-steps`：前多少次更新冻结 backbone/encoder；
+  设为大于总更新次数即可全程冻结。
+- `--freeze-boxes`：冻结 atom/charge box 分支，只训练 bond heads。
+- `--box-lr`、`--shared-bond-lr`、`--line-lr`、`--band-lr`：各分支学习率。
+- `--training-manifest`：使用通过预检的训练样本子集。
+- `--checkpoint-every`：恢复点保存间隔；`--resume`：恢复训练。
+- `--patience 0`：不早停；完整参数见 `--help`。
 
-Provide a compatible `independent_scored_line_band_joint_v3` checkpoint:
+输出包括 `best_joint.pt`、`last_joint.pt`、各轮权重和恢复点。
+每轮在固定验证集记录 atom/charge/bond 指标、严格全图正确率、
+分子图正确* 和分子图正确_ocr；`monitor/` 保存逐轮 CSV、指标曲线和 loss 曲线。
+
+## 3. 模型推理与预测
+
+单图神经网络预测不需要安装数据准备工具或 OCR 模型。
+提供兼容 joint 权重和输入图片即可：
 
 ```bash
 python -m band_training.predict_scored_bonds \
@@ -99,70 +100,29 @@ python -m band_training.predict_scored_bonds \
   --refine-line-peaks --stereo-from-band
 ```
 
-The command writes a graph JSON in original-image pixel coordinates and a
-preview PNG. This CLI performs geometry-only graph prediction; it does not run
-OCR. Joint checkpoints contain the base tensors, so their historical
-`config.base` file path is not required by this publication's current loader.
-Use only checkpoints from a trusted source: loading uses PyTorch pickle.
+使用 `--device cpu` 可以改为 CPU 推理。该命令写出：
 
-## Train and evaluate
+- `prediction.json`：原图像素坐标下的 atom/charge boxes、lines、bands、
+  键类型、连接关系、各分支 score 及未关联候选。
+- `prediction.png`：原图与各预测分支的预览图。
 
-The current continuation entry point is `band_training.train_v6_continue`.
-It expects a compatible joint initialization checkpoint, a passed preflight,
-fixed `train.json` / `val.json`, renderer-compatible annotations, and a local
-PaddleOCR runtime. It does not train an initialized model from scratch.
+组图使用预测坐标关联，不使用真实 atom index。该命令不会识别官能团文字，
+也不输出经过 OCR 展开的最终 SMILES。Joint checkpoint 已包含 base tensors，
+不需要其历史 `config.base` 路径指向的父权重文件。仅加载可信来源的权重。
+
+## 4. 代码与测试
+
+`band_training/` 包含当前模型、loss、训练、推理、组图与评估；
+`config/` 是模型配置；`repo/engine/` 是检测引擎。
+`pair_training/`、WebApp 与历史 launcher 保留用于兼容旧模型，
+部分历史脚本有旧机器路径；新任务使用上面的明确 CLI。
 
 ```bash
-python -m band_training.preflight_v6 \
-  --dataset /path/to/dataset --output runs/preflight --workers 4
-# Supply --mini-hard-manifest /path/to/mini_hard/data_manifest.json when needed.
-
-CUDA_VISIBLE_DEVICES=0 python -m band_training.train_v6_continue \
-  --dataset /path/to/dataset --preflight runs/preflight \
-  --init /path/to/best_joint.pt --output runs/experiment \
-  --epochs 3 --batch-size 16 --workers 4 --patience 0
+bash scripts/check_source.sh
 ```
 
-`--patience 0` disables early stopping. Other options include
-`--training-manifest`, `--freeze-boxes`, `--freeze-feature-steps`, per-head
-learning rates, and resumable checkpointing. Each epoch evaluates all fixed
-validation images with identical graph rules and PaddleOCR settings. Monitors
-are written under the run's `monitor/` directory. Historical launch scripts may
-refer to unavailable local data or old checkpoints; use the explicit CLI above
-for a new machine.
+完整测试同样需要第 1 节的化学图评估依赖。
 
-## Development evaluation record
-
-The historical v6 dataset had **140,490 effective training images** (six known
-mini_hard images excluded) and **1,497 fixed validation images**. The retained
-pre-v6 best checkpoint achieved:
-
-| Metric | Fixed validation |
-| --- | ---: |
-| Atom F1 | 99.65% |
-| Charge F1 | 90.91% |
-| Bond F1 | 99.09% |
-| Strict complete graph | 92.25% |
-| Molecular graph* | 92.12% |
-| Molecular graph_ocr | 91.12% |
-
-These are **development validation results**, not independent test estimates.
-The reported atom F1 uses the historical label-aware matching rule (IoU ≥0.1
-or a center-distance fallback); IoU-0.5 detection metrics are recorded
-separately. Bond correctness includes both linked atoms, type, and directed
-stereobond orientation. Graph* anonymizes functional-group/dummy labels;
-graph_ocr additionally checks recognized text. Isotope, atom CIP, implicit H,
-and E/Z are not independently scored by these metrics.
-
-Longer v6 continuation and subsequent short controlled experiments did not
-surpass the retained checkpoint on whole-molecule accuracy. Their plots and
-aggregate CSVs are preserved in `docs/benchmarks/`; newer weights should not be
-assumed better merely because they trained longer. No checkpoint download is
-provided in this source snapshot.
-
-## License
-
-Original B2M code is released under the [MIT License](LICENSE). Bundled upstream
-components keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
-and `repo/LICENSE`. This is a source-code publication, not a grant of rights to
-external molecular datasets or model weights.
+训练数据和模型权重不随仓库发布；历史聚合指标仅存放于 `docs/benchmarks/`。
+原创代码采用 [MIT License](LICENSE)，第三方引擎等保留原许可证，详见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

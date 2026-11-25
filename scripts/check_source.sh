@@ -8,6 +8,8 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
   band_training.test_paddle_ocr_replay \
   band_training.test_molecular_graph_metrics \
   band_training.test_v6_continue \
-  band_training.test_v6_prior_control
+  band_training.test_v6_prior_control \
+  band_training.test_invariants \
+  band_training.test_dataset_runtime
 "$PYTHON_BIN" -m band_training.predict_scored_bonds --help >/dev/null
 "$PYTHON_BIN" -m band_training.train_v6_continue --help >/dev/null
