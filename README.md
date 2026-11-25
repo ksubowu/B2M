@@ -1,14 +1,18 @@
 # B2M — Bond Bands to Molecular Graphs
 
-B2M 用于化学结构图片的模型训练和预测：检测 atom/charge boxes，分别预测带 score
-的 bond lines 和 bands，再通过几何关系组装分子图。line 端点表达连接位置，band
-区域与类别表达单键、双键、三键、芳香键、实楔键和虚楔键的视觉特征。
+B2M trains models to recognize chemical structure images and predict molecular
+graphs. It detects atom/charge boxes, predicts independently scored bond lines
+and bands, and assembles a graph using geometric relationships. Line endpoints
+locate connections; band regions and classes capture the visual features of
+single, double, triple, aromatic, solid-wedge, and dashed-wedge bonds.
 
-**训练数据的生成、绘图及标注准备在独立仓库
-[chem-structure-prep](https://github.com/ksubowu/chem-structure-prep)。**
-本仓库只消费已准备好的图片与标注，不包含数据集和模型权重。
+**Image rendering, training-data generation, and annotation preparation are
+maintained separately in
+[chem-structure-prep](https://github.com/ksubowu/chem-structure-prep).**
+B2M consumes prepared images and annotations. Datasets and model weights are
+not included in this repository.
 
-## 1. 安装模型环境
+## 1. Install the model environment
 
 ```bash
 git clone https://github.com/ksubowu/B2M.git
@@ -17,11 +21,13 @@ conda env create -f environment-bb2m.yml
 conda activate bb2m
 ```
 
-`environment-bb2m.yml` 是已有 Linux/CUDA 训练环境的版本快照：Python 3.12、
-PyTorch 2.10 / torchvision 0.25、CUDA 12.8。其它平台需调整对应 PyTorch 构建。
+`environment-bb2m.yml` is a snapshot of the working Linux/CUDA training
+environment: Python 3.12, PyTorch 2.10 / torchvision 0.25, and CUDA 12.8.
+Other platforms require an appropriate PyTorch build.
 
-如果需要训练时的完整分子图评估，还需安装独立化学工具包作为图校验后端，
-无需运行其数据生成命令：
+Complete molecular graph evaluation during training also requires the separate
+chemistry package as a graph-validation backend. You do not need to run its
+data-generation commands:
 
 ```bash
 python -m pip install git+https://github.com/ksubowu/chem-structure-prep.git
@@ -29,67 +35,78 @@ conda create -n b2m-ocr python=3.11 pip
 conda run -n b2m-ocr python -m pip install -r requirements_paddle_ocr.txt
 ```
 
-设置 `B2M_PADDLE_PYTHON` 为 `b2m-ocr` 环境的 Python 路径，
-`B2M_PADDLE_MODELS` 为本地 PaddleOCR 模型目录，其中应有
-`en_source/inference.pdmodel` 和 `en_source/inference.pdiparams`。
-默认路径分别为 `.venvs/paddleocr311/bin/python` 和
-`webapp_data/paddleocr_models/`。模型文件需另行提供。
-完整评估固定使用 PaddleOCR 英文多尺度＋投票；PaddleOCR 不与训练环境混装。
+Set `B2M_PADDLE_PYTHON` to the Python executable in the `b2m-ocr` environment.
+Set `B2M_PADDLE_MODELS` to a local PaddleOCR model directory containing
+`en_source/inference.pdmodel` and `en_source/inference.pdiparams`.
+The default paths are `.venvs/paddleocr311/bin/python` and
+`webapp_data/paddleocr_models/`, respectively. Model files must be supplied
+separately. Complete evaluation uses PaddleOCR English multiscale recognition
+with voting. Keep PaddleOCR in its separate environment.
 
-## 2. 训练模型
+## 2. Train a model
 
-当前入口 `band_training.train_v6_continue` 是从兼容 joint 权重进行微调的流程，
-不支持直接从随机初始化开始。初始化权重 schema 应为
-`independent_scored_line_band_joint_v3`。
+The current entry point, `band_training.train_v6_continue`, fine-tunes a
+compatible joint checkpoint. It does not support training directly from random
+initialization. The initialization checkpoint must use the schema
+`independent_scored_line_band_joint_v3`.
 
-### 已准备数据的输入要求
+### Prepared dataset requirements
 
-- 数据集根目录包含固定的 `train.json`、`val.json` 和 `dataset_config.json`。
-  当前 preflight 使用后者的 `validation_reference.manifest_sha256` 验证冻结验证集。
-- 每条记录包含 `sample_id`、`group`、`image`、`annotation`、`band_target`、
-  `line_target`，资产路径相对于数据集根目录。
-- `annotation` 提供 atom/charge boxes 与参考连通关系；`band_target` 提供
-  `labels`、`quads`；`line_target` 提供对应的 `labels`、`lines`。
-- box、line、band 必须对齐同一张原图；loader 会对图片与坐标施加同一个
-  640×640 letterbox 变换。训练集与验证集不可有相同样本或分组。
+- The dataset root contains fixed `train.json`, `val.json`, and
+  `dataset_config.json` files. The current preflight uses
+  `validation_reference.manifest_sha256` in the configuration to verify the
+  frozen validation set.
+- Each record contains `sample_id`, `group`, `image`, `annotation`,
+  `band_target`, and `line_target`. Asset paths are relative to the dataset root.
+- `annotation` provides atom/charge boxes and reference connectivity;
+  `band_target` provides `labels` and `quads`; `line_target` provides the
+  corresponding `labels` and `lines`.
+- Boxes, lines, and bands must align with the same original image. The loader
+  applies the same 640×640 letterbox transform to the image and coordinates.
+  Training and validation sets must not share samples or groups.
 
-类别为 13 个 atom 类别、5 个 charge 类别、6 个 bond 类别。
-Atom：`other, C, O, N, Cl, Br, S, F, B, I, P, H, Si`；charge：
-`-4, -2, -1, +1, +2`（并非每类都有训练样本）；bond head 标签依次为
-`single, double, triple, aromatic, wedge, dash`。
+The model has 13 atom classes, 5 charge classes, and 6 bond classes:
+
+- Atoms: `other, C, O, N, Cl, Br, S, F, B, I, P, H, Si`.
+- Charges: `-4, -2, -1, +1, +2`. Not every class has training examples.
+- Bond-head labels, in order: `single, double, triple, aromatic, wedge, dash`.
 
 ```bash
-# 检查现成训练集的目标、坐标与划分，并保存本次训练清单
+# Check targets, coordinates, and splits; save the effective run manifests.
 python -m band_training.preflight_v6 \
   --dataset /path/to/dataset --output runs/preflight --workers 4
-# 如有已归档极小图，可额外传入：
+# To exclude previously archived extremely small images, optionally add:
 # --mini-hard-manifest /path/to/mini_hard/data_manifest.json
 
-# 训练 3 轮，关闭早停
+# Train for three epochs with early stopping disabled.
 CUDA_VISIBLE_DEVICES=0 python -m band_training.train_v6_continue \
   --dataset /path/to/dataset --preflight runs/preflight \
   --init /path/to/best_joint.pt --output runs/experiment \
   --epochs 3 --batch-size 16 --workers 4 --patience 0
 ```
 
-可用参数：
+Available options include:
 
-- `--freeze-feature-steps`：前多少次更新冻结 backbone/encoder；
-  设为大于总更新次数即可全程冻结。
-- `--freeze-boxes`：冻结 atom/charge box 分支，只训练 bond heads。
-- `--box-lr`、`--shared-bond-lr`、`--line-lr`、`--band-lr`：各分支学习率。
-- `--training-manifest`：使用通过预检的训练样本子集。
-- `--checkpoint-every`：恢复点保存间隔；`--resume`：恢复训练。
-- `--patience 0`：不早停；完整参数见 `--help`。
+- `--freeze-feature-steps`: freeze the backbone/encoder for the specified number
+  of updates. Set it above the total update count to keep them frozen throughout.
+- `--freeze-boxes`: freeze the atom/charge box branch and train only bond heads.
+- `--box-lr`, `--shared-bond-lr`, `--line-lr`, `--band-lr`: learning rates for
+  the respective branches.
+- `--training-manifest`: use a subset of training records that passed preflight.
+- `--checkpoint-every`: recovery checkpoint interval; `--resume`: resume training.
+- `--patience 0`: disable early stopping. See `--help` for all options.
 
-输出包括 `best_joint.pt`、`last_joint.pt`、各轮权重和恢复点。
-每轮在固定验证集记录 atom/charge/bond 指标、严格全图正确率、
-分子图正确* 和分子图正确_ocr；`monitor/` 保存逐轮 CSV、指标曲线和 loss 曲线。
+Outputs include `best_joint.pt`, `last_joint.pt`, per-epoch checkpoints, and
+recovery checkpoints. Each epoch records atom/charge/bond metrics, strict
+complete-graph accuracy, anonymous-dummy molecular graph accuracy (`graph*`),
+and molecular graph accuracy with OCR (`graph_ocr`) on the fixed validation set.
+The run's `monitor/` directory contains per-epoch CSV files, metric curves, and
+loss curves.
 
-## 3. 模型推理与预测
+## 3. Run inference and make predictions
 
-单图神经网络预测不需要安装数据准备工具或 OCR 模型。
-提供兼容 joint 权重和输入图片即可：
+Single-image neural prediction does not require the data-preparation package or
+OCR models. Supply a compatible joint checkpoint and an input image:
 
 ```bash
 python -m band_training.predict_scored_bonds \
@@ -100,29 +117,36 @@ python -m band_training.predict_scored_bonds \
   --refine-line-peaks --stereo-from-band
 ```
 
-使用 `--device cpu` 可以改为 CPU 推理。该命令写出：
+Use `--device cpu` for CPU inference. The command writes:
 
-- `prediction.json`：原图像素坐标下的 atom/charge boxes、lines、bands、
-  键类型、连接关系、各分支 score 及未关联候选。
-- `prediction.png`：原图与各预测分支的预览图。
+- `prediction.json`: atom/charge boxes, lines, bands, bond types, connectivity,
+  branch scores, and unlinked candidates in original-image pixel coordinates.
+- `prediction.png`: a preview of the original image and prediction branches.
 
-组图使用预测坐标关联，不使用真实 atom index。该命令不会识别官能团文字，
-也不输出经过 OCR 展开的最终 SMILES。Joint checkpoint 已包含 base tensors，
-不需要其历史 `config.base` 路径指向的父权重文件。仅加载可信来源的权重。
+Graph assembly associates predicted coordinates without ground-truth atom
+indices. This command does not recognize functional-group text or produce a
+final SMILES with OCR-expanded labels. Joint checkpoints already contain the
+base tensors, so the parent checkpoint referenced by the historical
+`config.base` path is not required. Load checkpoints only from trusted sources.
 
-## 4. 代码与测试
+## 4. Source layout and tests
 
-`band_training/` 包含当前模型、loss、训练、推理、组图与评估；
-`config/` 是模型配置；`repo/engine/` 是检测引擎。
-`pair_training/`、WebApp 与历史 launcher 保留用于兼容旧模型，
-部分历史脚本有旧机器路径；新任务使用上面的明确 CLI。
+`band_training/` contains the current models, losses, training, inference,
+graph assembly, and evaluation. `config/` contains model configurations, and
+`repo/engine/` contains the detection engine. `pair_training/`, the WebApp,
+and historical launchers are retained for compatibility with earlier models.
+Some historical scripts contain machine-specific paths; use the explicit CLI
+commands above for new tasks.
 
 ```bash
 bash scripts/check_source.sh
 ```
 
-完整测试同样需要第 1 节的化学图评估依赖。
+The complete test suite also requires the chemistry evaluation dependency
+listed in Section 1.
 
-训练数据和模型权重不随仓库发布；历史聚合指标仅存放于 `docs/benchmarks/`。
-原创代码采用 [MIT License](LICENSE)，第三方引擎等保留原许可证，详见
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+Training data and model weights are not distributed with this repository.
+Historical aggregate metrics are retained under `docs/benchmarks/`.
+Original code is licensed under the [MIT License](LICENSE). Third-party
+components retain their original licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
